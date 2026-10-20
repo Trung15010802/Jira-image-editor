@@ -2,6 +2,10 @@ export type ShotId = 'a' | 'b'
 
 export type Mode = 'single' | 'compare'
 
+export type Orientation = 'horizontal' | 'vertical'
+
+export type BadgeStyle = 'none' | 'number' | 'beforeAfter'
+
 export type Tool = 'select' | 'arrow' | 'box' | 'text' | 'highlight' | 'redact'
 
 export interface Shot {
@@ -65,10 +69,20 @@ export interface Guide {
   position: number
 }
 
+export interface Badge {
+  id: string
+  shotId: ShotId
+  text: string
+  x: number
+  y: number
+}
+
 export interface Snapshot {
   shots: Shot[]
   annotations: Record<string, Annotation[]>
   guides: Guide[]
+  badges: Badge[]
+  badgeStyle: BadgeStyle
   activeId: ShotId | null
   mode: Mode
 }

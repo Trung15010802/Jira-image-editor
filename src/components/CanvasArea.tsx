@@ -13,12 +13,20 @@ import {
   Text,
 } from 'react-konva'
 import { useImage } from '../hooks/useImage'
+import {
+  BADGE_BORDER,
+  BADGE_FILL,
+  BADGE_RADIUS_RATIO,
+  BADGE_TEXT,
+  getBadgeMetrics,
+} from '../lib/badge'
 import { newId } from '../lib/id'
 import { getBoard } from '../lib/layout'
 import { useEditor } from '../store/editorStore'
 import type {
   Annotation,
   AreaAnnotation,
+  Badge,
   Shot,
   ShotId,
   Snapshot,
@@ -134,6 +142,8 @@ export function CanvasArea() {
   const annotationDragOrigin = useRef<{ x: number; y: number } | null>(null)
   const guideDragSnapshot = useRef<Snapshot | null>(null)
   const guideDragOrigin = useRef<number | null>(null)
+  const badgeDragSnapshot = useRef<Snapshot | null>(null)
+  const badgeDragOrigin = useRef<{ x: number; y: number } | null>(null)
   const cancelText = useRef(false)
 
   const shots = useEditor((state) => state.shots)
@@ -144,8 +154,10 @@ export function CanvasArea() {
   const textSize = useEditor((state) => state.textSize)
   const annotations = useEditor((state) => state.annotations)
   const guides = useEditor((state) => state.guides)
+  const badges = useEditor((state) => state.badges)
   const selectedAnnotation = useEditor((state) => state.selectedAnnotation)
   const selectedGuideId = useEditor((state) => state.selectedGuideId)
+  const selectedBadgeId = useEditor((state) => state.selectedBadgeId)
 
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [view, setView] = useState({ zoom: 1, x: 0, y: 0 })
@@ -444,6 +456,83 @@ export function CanvasArea() {
     })
   }
 
+  const handleBadgeDragStart = (badge: Badge) => {
+    badgeDragSnapshot.current = useEditor.getState().snapshot()
+    badgeDragOrigin.current = { x: badge.x, y: badge.y }
+  }
+
+  const handleBadgeDragEnd = (
+    event: KonvaEventObject<DragEvent>,
+    badge: Badge,
+  ) => {
+    const node = event.target
+    const snapshot = badgeDragSnapshot.current
+    const origin = badgeDragOrigin.current
+    badgeDragSnapshot.current = null
+    badgeDragOrigin.current = null
+    if (!snapshot || !origin) return
+    if (
+      Math.abs(node.x() - origin.x) < 0.5 &&
+      Math.abs(node.y() - origin.y) < 0.5
+    ) {
+      return
+    }
+    const state = useEditor.getState()
+    state.pushSnapshot(snapshot)
+    state.updateBadge(badge.id, { x: node.x(), y: node.y() })
+  }
+
+  const renderBadge = (shot: Shot, badge: Badge) => {
+    const metrics = getBadgeMetrics(shot, badge.text)
+    const editable = tool === 'select' && !spaceDown
+    const selected = selectedBadgeId === badge.id
+    return (
+      <Group
+        key={badge.id}
+        x={badge.x}
+        y={badge.y}
+        draggable={editable}
+        listening={editable}
+        onMouseDown={(event) => {
+          event.cancelBubble = true
+          useEditor.getState().selectBadge(badge.id)
+        }}
+        onTap={(event) => {
+          event.cancelBubble = true
+          useEditor.getState().selectBadge(badge.id)
+        }}
+        onDragStart={() => handleBadgeDragStart(badge)}
+        onDragEnd={(event) => handleBadgeDragEnd(event, badge)}
+      >
+        <Rect
+          width={metrics.width}
+          height={metrics.height}
+          fill={BADGE_FILL}
+          cornerRadius={metrics.height * BADGE_RADIUS_RATIO}
+          stroke={selected ? '#38bdf8' : BADGE_BORDER}
+          strokeWidth={selected ? 2 : 1.5}
+          strokeScaleEnabled={false}
+          shadowColor="#000000"
+          shadowBlur={12}
+          shadowOpacity={0.35}
+          shadowOffset={{ x: 0, y: 4 }}
+        />
+        <Text
+          text={badge.text}
+          width={metrics.width}
+          height={metrics.height}
+          align="center"
+          verticalAlign="middle"
+          fill={BADGE_TEXT}
+          fontSize={metrics.fontSize}
+          fontStyle="bold"
+          fontFamily="ui-sans-serif, system-ui, sans-serif"
+          listening={false}
+        />
+      </Group>
+    )
+  }
+
   const renderAnnotation = (shot: Shot, annotation: Annotation) => {
     const editable = mode === 'single' && tool === 'select' && !spaceDown
     const common = {
@@ -653,7 +742,8 @@ export function CanvasArea() {
           onMouseMove={handleStageMouseMove}
           onMouseUp={handleStageMouseUp}
           onDragEnd={(event) => {
-            const stage = event.target
+            const stage = event.target.getStage()
+            if (event.target !== stage) return
             setView((current) => ({ ...current, x: stage.x(), y: stage.y() }))
           }}
         >
@@ -661,6 +751,9 @@ export function CanvasArea() {
             {board.placements.map((placement) => {
               const shot = placement.shot
               const shotAnnotations = annotations[shot.id] ?? []
+              const shotBadges = badges.filter(
+                (badge) => badge.shotId === shot.id,
+              )
               const selected =
                 selectedAnnotation?.shotId === shot.id
                   ? shotAnnotations.find(
@@ -683,6 +776,7 @@ export function CanvasArea() {
                     renderAnnotation(shot, annotation),
                   )}
                   {selected ? renderSelection(selected) : null}
+                  {shotBadges.map((badge) => renderBadge(shot, badge))}
                   {draft?.shotId === shot.id ? renderDraft(shot) : null}
                   {mode === 'compare' ? (
                     <Text

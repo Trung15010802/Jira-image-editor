@@ -3,6 +3,8 @@ import { getBoard } from '../lib/layout'
 import type { PreparedShot } from '../lib/image'
 import type {
   Annotation,
+  Badge,
+  BadgeStyle,
   Guide,
   Mode,
   Shot,
@@ -33,8 +35,11 @@ interface EditorState {
   textSize: number
   annotations: Record<string, Annotation[]>
   guides: Guide[]
+  badges: Badge[]
+  badgeStyle: BadgeStyle
   selectedAnnotation: { shotId: ShotId; id: string } | null
   selectedGuideId: string | null
+  selectedBadgeId: string | null
   past: Snapshot[]
   future: Snapshot[]
   exportOpen: boolean
@@ -64,6 +69,11 @@ interface EditorState {
   removeGuide: (id: string) => void
   clearGuides: () => void
 
+  setBadgeStyle: (style: BadgeStyle) => void
+  updateBadge: (id: string, patch: Partial<Pick<Badge, 'x' | 'y' | 'text'>>) => void
+  selectBadge: (id: string) => void
+  removeBadge: (id: string) => void
+
   pushSnapshot: (snapshot: Snapshot) => void
   snapshot: () => Snapshot
   undo: () => void
@@ -84,15 +94,40 @@ const snapshotOf = (state: {
   shots: Shot[]
   annotations: Record<string, Annotation[]>
   guides: Guide[]
+  badges: Badge[]
+  badgeStyle: BadgeStyle
   activeId: ShotId | null
   mode: Mode
 }): Snapshot => ({
   shots: state.shots.map((shot) => ({ ...shot })),
   annotations: cloneAnnotations(state.annotations),
   guides: state.guides.map((guide) => ({ ...guide })),
+  badges: state.badges.map((badge) => ({ ...badge })),
+  badgeStyle: state.badgeStyle,
   activeId: state.activeId,
   mode: state.mode,
 })
+
+const buildBadges = (
+  shots: Shot[],
+  style: BadgeStyle,
+  existing: Badge[],
+): Badge[] => {
+  if (style === 'none') return []
+  const ordered = [...shots].sort((a, b) => a.id.localeCompare(b.id))
+  return ordered.map((shot, index) => {
+    const previous = existing.find((badge) => badge.shotId === shot.id)
+    const text =
+      style === 'number' ? String(index + 1) : index === 0 ? 'Before' : 'After'
+    return {
+      id: previous?.id ?? makeId('badge'),
+      shotId: shot.id,
+      text,
+      x: previous?.x ?? 18,
+      y: previous?.y ?? 18,
+    }
+  })
+}
 
 export const useEditor = create<EditorState>((set, get) => {
   const commit = (
@@ -116,8 +151,11 @@ export const useEditor = create<EditorState>((set, get) => {
     textSize: DEFAULT_TEXT_SIZE,
     annotations: {},
     guides: [],
+    badges: [],
+    badgeStyle: 'none',
     selectedAnnotation: null,
     selectedGuideId: null,
+    selectedBadgeId: null,
     past: [],
     future: [],
     exportOpen: false,
@@ -167,10 +205,12 @@ export const useEditor = create<EditorState>((set, get) => {
         return {
           shots,
           annotations,
+          badges: buildBadges(shots, state.badgeStyle, state.badges),
           activeId,
           mode: nextMode,
           selectedAnnotation: null,
           selectedGuideId: null,
+          selectedBadgeId: null,
         }
       })
     },
@@ -184,6 +224,7 @@ export const useEditor = create<EditorState>((set, get) => {
         return {
           shots,
           annotations,
+          badges: buildBadges(shots, state.badgeStyle, state.badges),
           activeId:
             state.activeId === id
               ? (shots[0]?.id ?? null)
@@ -191,6 +232,7 @@ export const useEditor = create<EditorState>((set, get) => {
           mode: shots.length < 2 ? 'single' : state.mode,
           selectedAnnotation: null,
           selectedGuideId: null,
+          selectedBadgeId: null,
         }
       })
     },
@@ -201,6 +243,7 @@ export const useEditor = create<EditorState>((set, get) => {
         mode: 'single',
         selectedAnnotation: null,
         selectedGuideId: null,
+        selectedBadgeId: null,
       }),
 
     setMode: (mode) => {
@@ -209,6 +252,8 @@ export const useEditor = create<EditorState>((set, get) => {
         mode,
         tool: mode === 'compare' ? 'select' : get().tool,
         selectedAnnotation: null,
+        selectedGuideId: null,
+        selectedBadgeId: null,
       })
     },
 
@@ -264,6 +309,7 @@ export const useEditor = create<EditorState>((set, get) => {
         },
         selectedAnnotation: { shotId, id: annotation.id },
         selectedGuideId: null,
+        selectedBadgeId: null,
       })),
 
     updateAnnotation: (shotId, id, patch) =>
@@ -279,14 +325,22 @@ export const useEditor = create<EditorState>((set, get) => {
       })),
 
     selectAnnotation: (shotId, id) =>
-      set({ selectedAnnotation: { shotId, id }, selectedGuideId: null }),
+      set({
+        selectedAnnotation: { shotId, id },
+        selectedGuideId: null,
+        selectedBadgeId: null,
+      }),
 
     clearSelection: () =>
-      set({ selectedAnnotation: null, selectedGuideId: null }),
+      set({
+        selectedAnnotation: null,
+        selectedGuideId: null,
+        selectedBadgeId: null,
+      }),
 
     removeSelected: () => {
-      const { selectedAnnotation, selectedGuideId } = get()
-      if (!selectedAnnotation && !selectedGuideId) return
+      const { selectedAnnotation, selectedGuideId, selectedBadgeId } = get()
+      if (!selectedAnnotation && !selectedGuideId && !selectedBadgeId) return
 
       commit((state) => {
         if (selectedAnnotation) {
@@ -298,6 +352,12 @@ export const useEditor = create<EditorState>((set, get) => {
               ).filter((annotation) => annotation.id !== selectedAnnotation.id),
             },
             selectedAnnotation: null,
+          }
+        }
+        if (selectedBadgeId) {
+          return {
+            badges: state.badges.filter((badge) => badge.id !== selectedBadgeId),
+            selectedBadgeId: null,
           }
         }
         return {
@@ -331,7 +391,11 @@ export const useEditor = create<EditorState>((set, get) => {
       })),
 
     selectGuide: (id) =>
-      set({ selectedGuideId: id, selectedAnnotation: null }),
+      set({
+        selectedGuideId: id,
+        selectedAnnotation: null,
+        selectedBadgeId: null,
+      }),
 
     removeGuide: (id) => {
       if (!get().guides.some((guide) => guide.id === id)) return
@@ -347,6 +411,36 @@ export const useEditor = create<EditorState>((set, get) => {
       commit(() => ({
         guides: [],
         selectedGuideId: null,
+      }))
+    },
+
+    setBadgeStyle: (style) =>
+      commit((state) => ({
+        badges: buildBadges(state.shots, style, state.badges),
+        badgeStyle: style,
+        selectedBadgeId: null,
+      })),
+
+    updateBadge: (id, patch) =>
+      set((state) => ({
+        badges: state.badges.map((badge) =>
+          badge.id === id ? { ...badge, ...patch } : badge,
+        ),
+      })),
+
+    selectBadge: (id) =>
+      set({
+        selectedBadgeId: id,
+        selectedAnnotation: null,
+        selectedGuideId: null,
+      }),
+
+    removeBadge: (id) => {
+      if (!get().badges.some((badge) => badge.id === id)) return
+      commit((state) => ({
+        badges: state.badges.filter((badge) => badge.id !== id),
+        selectedBadgeId:
+          state.selectedBadgeId === id ? null : state.selectedBadgeId,
       }))
     },
 
@@ -367,10 +461,13 @@ export const useEditor = create<EditorState>((set, get) => {
           shots: previous.shots.map((shot) => ({ ...shot })),
           annotations: cloneAnnotations(previous.annotations),
           guides: previous.guides.map((guide) => ({ ...guide })),
+          badges: previous.badges.map((badge) => ({ ...badge })),
+          badgeStyle: previous.badgeStyle,
           activeId: previous.activeId,
           mode: previous.mode,
           selectedAnnotation: null,
           selectedGuideId: null,
+          selectedBadgeId: null,
           past: state.past.slice(0, -1),
           future: [current, ...state.future].slice(0, MAX_HISTORY),
         }
@@ -385,10 +482,13 @@ export const useEditor = create<EditorState>((set, get) => {
           shots: next.shots.map((shot) => ({ ...shot })),
           annotations: cloneAnnotations(next.annotations),
           guides: next.guides.map((guide) => ({ ...guide })),
+          badges: next.badges.map((badge) => ({ ...badge })),
+          badgeStyle: next.badgeStyle,
           activeId: next.activeId,
           mode: next.mode,
           selectedAnnotation: null,
           selectedGuideId: null,
+          selectedBadgeId: null,
           past: [...state.past, current].slice(-MAX_HISTORY),
           future: state.future.slice(1),
         }

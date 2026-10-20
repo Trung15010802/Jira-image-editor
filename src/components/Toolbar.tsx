@@ -12,17 +12,18 @@ import {
   SeparatorHorizontal,
   SeparatorVertical,
   Square,
+  Tag,
   Trash2,
   Type,
   Undo2,
   Upload,
   X,
 } from 'lucide-react'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { importFiles } from '../lib/importFiles'
 import { useEditor } from '../store/editorStore'
-import type { Tool } from '../types'
+import type { BadgeStyle, Tool } from '../types'
 
 const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#ffffff']
 
@@ -33,6 +34,12 @@ const TOOLS: { id: Tool; label: string; shortcut: string; icon: ReactNode }[] = 
   { id: 'text', label: 'Text label', shortcut: 'T', icon: <Type className="h-4 w-4" /> },
   { id: 'highlight', label: 'Highlight', shortcut: 'H', icon: <Highlighter className="h-4 w-4" /> },
   { id: 'redact', label: 'Redact', shortcut: 'X', icon: <Eraser className="h-4 w-4" /> },
+]
+
+const BADGE_OPTIONS: { id: BadgeStyle; label: string; hint: string }[] = [
+  { id: 'none', label: 'No badge', hint: 'Off' },
+  { id: 'number', label: 'Numbers', hint: '1 · 2' },
+  { id: 'beforeAfter', label: 'Before / After', hint: 'A · B' },
 ]
 
 const baseButton =
@@ -79,6 +86,7 @@ function Divider() {
 
 export function Toolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [badgeMenuOpen, setBadgeMenuOpen] = useState(false)
   const shots = useEditor((state) => state.shots)
   const activeId = useEditor((state) => state.activeId)
   const mode = useEditor((state) => state.mode)
@@ -89,6 +97,8 @@ export function Toolbar() {
   const textSize = useEditor((state) => state.textSize)
   const selectedAnnotation = useEditor((state) => state.selectedAnnotation)
   const selectedGuideId = useEditor((state) => state.selectedGuideId)
+  const selectedBadgeId = useEditor((state) => state.selectedBadgeId)
+  const badgeStyle = useEditor((state) => state.badgeStyle)
   const canUndo = useEditor((state) => state.past.length > 0)
   const canRedo = useEditor((state) => state.future.length > 0)
   const setActive = useEditor((state) => state.setActive)
@@ -99,12 +109,15 @@ export function Toolbar() {
   const removeShot = useEditor((state) => state.removeShot)
   const addGuide = useEditor((state) => state.addGuide)
   const clearGuides = useEditor((state) => state.clearGuides)
+  const setBadgeStyle = useEditor((state) => state.setBadgeStyle)
   const removeSelected = useEditor((state) => state.removeSelected)
   const undo = useEditor((state) => state.undo)
   const redo = useEditor((state) => state.redo)
   const openExport = useEditor((state) => state.openExport)
 
-  const hasSelection = Boolean(selectedAnnotation || selectedGuideId)
+  const hasSelection = Boolean(
+    selectedAnnotation || selectedGuideId || selectedBadgeId,
+  )
   const hasShots = shots.length > 0
 
   const selectedText = selectedAnnotation
@@ -320,6 +333,53 @@ export function Toolbar() {
           <ToolButton title="Clear all guides" danger onClick={clearGuides}>
             <X className="h-4 w-4" />
           </ToolButton>
+        ) : null}
+      </div>
+
+      <Divider />
+
+      <div className="relative flex items-center">
+        <ToolButton
+          title="Image badges (1 · 2 or Before / After)"
+          active={badgeStyle !== 'none'}
+          disabled={!hasShots}
+          onClick={() => setBadgeMenuOpen((open) => !open)}
+        >
+          <Tag className="h-4 w-4" />
+        </ToolButton>
+        {badgeMenuOpen ? (
+          <>
+            <div
+              className="fixed inset-0 z-30"
+              onClick={() => setBadgeMenuOpen(false)}
+            />
+            <div className="absolute left-0 top-9 z-40 w-52 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-2xl">
+              {BADGE_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    setBadgeStyle(option.id)
+                    setBadgeMenuOpen(false)
+                  }}
+                  className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition ${
+                    badgeStyle === option.id
+                      ? 'bg-indigo-500/15 text-indigo-300'
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
+                  }`}
+                >
+                  <span>{option.label}</span>
+                  <span className="text-[10px] text-zinc-600">
+                    {option.hint}
+                  </span>
+                </button>
+              ))}
+              <div className="mt-1 border-t border-zinc-800 px-2.5 py-1.5 text-[10px] leading-snug text-zinc-600">
+                Drag a badge on the image to reposition it. Select it and press
+                Delete to remove it.
+              </div>
+            </div>
+          </>
         ) : null}
       </div>
 

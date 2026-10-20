@@ -3,12 +3,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { copyImageToClipboard, exportImage } from '../lib/export'
 import { getBoard } from '../lib/layout'
 import { useEditor } from '../store/editorStore'
+import type { Orientation } from '../types'
 
 export function ExportDialog() {
   const shots = useEditor((state) => state.shots)
   const activeId = useEditor((state) => state.activeId)
   const mode = useEditor((state) => state.mode)
   const annotations = useEditor((state) => state.annotations)
+  const badges = useEditor((state) => state.badges)
   const closeExport = useEditor((state) => state.closeExport)
 
   const activeShot = shots.find((shot) => shot.id === activeId) ?? shots[0]
@@ -18,6 +20,7 @@ export function ExportDialog() {
   const [scale, setScale] = useState(1)
   const [transparent, setTransparent] = useState(false)
   const [sideBySide, setSideBySide] = useState(mode === 'compare' && canCompare)
+  const [orientation, setOrientation] = useState<Orientation>('horizontal')
   const [filename, setFilename] = useState(
     activeShot ? `${activeShot.name}-annotated` : 'screenshot',
   )
@@ -39,8 +42,9 @@ export function ExportDialog() {
         shots,
         sideBySide && canCompare ? 'compare' : 'single',
         activeId,
+        orientation,
       ),
-    [shots, sideBySide, canCompare, activeId],
+    [shots, sideBySide, canCompare, activeId, orientation],
   )
 
   const outputWidth = Math.max(1, Math.round(board.width * scale))
@@ -50,11 +54,12 @@ export function ExportDialog() {
     setBusy('export')
     setError(null)
     try {
-      await exportImage(shots, annotations, {
+      await exportImage(shots, annotations, badges, {
         format,
         scale,
         transparent: format === 'png' && transparent,
         sideBySide: sideBySide && canCompare,
+        orientation,
         activeId,
         filename,
       })
@@ -72,10 +77,11 @@ export function ExportDialog() {
     setBusy('copy')
     setError(null)
     try {
-      await copyImageToClipboard(shots, annotations, {
+      await copyImageToClipboard(shots, annotations, badges, {
         scale,
         transparent,
         sideBySide: sideBySide && canCompare,
+        orientation,
         activeId,
         filename,
       })
@@ -153,6 +159,33 @@ export function ExportDialog() {
                   </span>
                 </button>
               </div>
+
+              {sideBySide ? (
+                <div className="mt-3">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Merge layout
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {(['horizontal', 'vertical'] as const).map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setOrientation(value)}
+                        className={`rounded-lg border px-2.5 py-2 text-left text-xs transition ${
+                          orientation === value
+                            ? 'border-indigo-500/70 bg-indigo-500/10 text-indigo-300'
+                            : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700'
+                        }`}
+                      >
+                        {value === 'horizontal' ? 'Horizontal' : 'Vertical'}
+                        <span className="mt-0.5 block text-[10px] text-zinc-600">
+                          {value === 'horizontal' ? 'Side by side' : 'Stacked'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
