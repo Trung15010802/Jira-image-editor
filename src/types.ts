@@ -1,3 +1,5 @@
+import type { PreparedShot } from './lib/image'
+
 export type ShotId = 'a' | 'b'
 
 export type Mode = 'single' | 'compare'
@@ -6,7 +8,16 @@ export type Orientation = 'horizontal' | 'vertical'
 
 export type BadgeStyle = 'none' | 'number' | 'beforeAfter'
 
-export type Tool = 'select' | 'arrow' | 'box' | 'ellipse' | 'text' | 'pen'
+export type Tool =
+  | 'select'
+  | 'arrow'
+  | 'box'
+  | 'ellipse'
+  | 'text'
+  | 'pen'
+  | 'callout'
+
+export type CalloutShapeKind = 'circle' | 'rect'
 
 export interface Shot {
   id: ShotId
@@ -69,12 +80,35 @@ export interface PenAnnotation {
   strokeWidth: number
 }
 
+export interface CalloutAnnotation {
+  id: string
+  type: 'callout'
+  shape: CalloutShapeKind
+  x: number
+  y: number
+  width: number
+  height: number
+  labelX: number
+  labelY: number
+  text: string
+  color: string
+  fontSize: number
+  strokeWidth: number
+}
+
 export type Annotation =
   | ArrowAnnotation
   | BoxAnnotation
   | EllipseAnnotation
   | TextAnnotation
   | PenAnnotation
+  | CalloutAnnotation
+
+export interface GuideStep {
+  id: string
+  shot: PreparedShot | null
+  annotations: Annotation[]
+}
 
 export interface Guide {
   id: string

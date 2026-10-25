@@ -5,9 +5,17 @@ import {
   BADGE_TEXT,
   getBadgeMetrics,
 } from './badge'
+import { calloutTextColor, getCalloutLayout } from './callout'
 import { getBoard } from './layout'
 import { loadImage } from './image'
-import type { Annotation, Badge, Orientation, Shot, ShotId } from '../types'
+import type {
+  Annotation,
+  Badge,
+  CalloutAnnotation,
+  Orientation,
+  Shot,
+  ShotId,
+} from '../types'
 
 export interface ExportOptions {
   format: 'png' | 'jpeg'
@@ -52,13 +60,75 @@ const drawArrow = (ctx: CanvasRenderingContext2D, annotation: Annotation) => {
   ctx.fill()
 }
 
-const drawAnnotation = (
+const drawCallout = (ctx: CanvasRenderingContext2D, annotation: CalloutAnnotation) => {
+  const layout = getCalloutLayout(annotation)
+  const { width, height, shape, color, strokeWidth, text, fontSize } = annotation
+  const head = Math.max(14, strokeWidth * 4)
+
+  ctx.save()
+  ctx.translate(annotation.x, annotation.y)
+  ctx.strokeStyle = color
+  ctx.fillStyle = color
+  ctx.lineWidth = strokeWidth
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  ctx.beginPath()
+  if (shape === 'circle') {
+    ctx.ellipse(width / 2, height / 2, width / 2, height / 2, 0, 0, Math.PI * 2)
+  } else {
+    ctx.rect(0, 0, width, height)
+  }
+  ctx.stroke()
+
+  if (layout.arrow.length === 4) {
+    const [x1, y1, x2, y2] = layout.arrow
+    const angle = Math.atan2(y2 - y1, x2 - x1)
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.lineTo(x2, y2)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(x2, y2)
+    ctx.lineTo(
+      x2 - head * Math.cos(angle - Math.PI / 7),
+      y2 - head * Math.sin(angle - Math.PI / 7),
+    )
+    ctx.lineTo(
+      x2 - head * Math.cos(angle + Math.PI / 7),
+      y2 - head * Math.sin(angle + Math.PI / 7),
+    )
+    ctx.closePath()
+    ctx.fill()
+  }
+
+  const { label } = layout
+  if (text.trim()) {
+    roundRectPath(ctx, label.x, label.y, label.width, label.height, label.height * 0.28)
+    ctx.fill()
+    ctx.fillStyle = calloutTextColor(color)
+    ctx.font = `700 ${fontSize}px ui-sans-serif, system-ui, sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, label.x + label.width / 2, label.y + label.height / 2)
+  } else {
+    ctx.beginPath()
+    ctx.arc(label.x, label.y, layout.dotRadius, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+export const drawAnnotation = (
   ctx: CanvasRenderingContext2D,
   annotation: Annotation,
 ) => {
   switch (annotation.type) {
     case 'arrow':
       drawArrow(ctx, annotation)
+      break
+    case 'callout':
+      drawCallout(ctx, annotation)
       break
     case 'box':
       ctx.strokeStyle = annotation.color
@@ -129,10 +199,10 @@ const roundRectPath = (
   ctx.closePath()
 }
 
-const drawBadge = (
+export const drawBadge = (
   ctx: CanvasRenderingContext2D,
-  shot: Shot,
-  badge: Badge,
+  shot: Pick<Shot, 'width'>,
+  badge: Pick<Badge, 'text' | 'x' | 'y'>,
 ) => {
   const metrics = getBadgeMetrics(shot, badge.text)
   ctx.save()

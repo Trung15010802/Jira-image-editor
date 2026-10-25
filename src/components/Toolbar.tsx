@@ -2,8 +2,10 @@ import {
   ArrowUpRight,
   Circle,
   Columns2,
+  Crosshair,
   Download,
   ImagePlus,
+  ListOrdered,
   Minus,
   MousePointer2,
   Pencil,
@@ -22,7 +24,9 @@ import {
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { importFiles } from '../lib/importFiles'
+import { CalloutShapeToggle } from './CalloutShapeToggle'
 import { useEditor } from '../store/editorStore'
+import { useGuide } from '../store/guideStore'
 import type { BadgeStyle, Tool } from '../types'
 
 const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#ffffff']
@@ -33,6 +37,7 @@ const TOOLS: { id: Tool; label: string; shortcut: string; icon: ReactNode }[] = 
   { id: 'box', label: 'Rectangle', shortcut: 'R', icon: <Square className="h-4 w-4" /> },
   { id: 'ellipse', label: 'Circle / Ellipse', shortcut: 'C', icon: <Circle className="h-4 w-4" /> },
   { id: 'pen', label: 'Pen', shortcut: 'P', icon: <Pencil className="h-4 w-4" /> },
+  { id: 'callout', label: 'Callout', shortcut: 'K', icon: <Crosshair className="h-4 w-4" /> },
   { id: 'text', label: 'Text label', shortcut: 'T', icon: <Type className="h-4 w-4" /> },
 ]
 
@@ -95,6 +100,8 @@ export function Toolbar() {
   const guides = useEditor((state) => state.guides)
   const annotations = useEditor((state) => state.annotations)
   const textSize = useEditor((state) => state.textSize)
+  const calloutShape = useEditor((state) => state.calloutShape)
+  const setCalloutShape = useEditor((state) => state.setCalloutShape)
   const selectedAnnotation = useEditor((state) => state.selectedAnnotation)
   const selectedGuideId = useEditor((state) => state.selectedGuideId)
   const selectedBadgeId = useEditor((state) => state.selectedBadgeId)
@@ -246,6 +253,10 @@ export function Toolbar() {
         ))}
       </div>
 
+      {tool === 'callout' ? (
+        <CalloutShapeToggle value={calloutShape} onChange={setCalloutShape} />
+      ) : null}
+
       <Divider />
 
       <div className="flex items-center gap-1 px-0.5">
@@ -395,6 +406,16 @@ export function Toolbar() {
           <Redo2 className="h-4 w-4" />
         </ToolButton>
       </div>
+
+      <button
+        type="button"
+        onClick={() => useGuide.getState().enter()}
+        className={`${baseButton} ml-1 border border-zinc-700 bg-zinc-900 px-2.5 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800`}
+        title="Guide mode: step-by-step screenshots with notes"
+      >
+        <ListOrdered className="h-3.5 w-3.5" />
+        <span className="hidden sm:inline">Guide</span>
+      </button>
 
       <button
         type="button"

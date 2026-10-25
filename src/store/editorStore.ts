@@ -5,6 +5,7 @@ import type {
   Annotation,
   Badge,
   BadgeStyle,
+  CalloutShapeKind,
   Guide,
   Mode,
   Shot,
@@ -33,6 +34,7 @@ interface EditorState {
   tool: Tool
   color: string
   textSize: number
+  calloutShape: CalloutShapeKind
   annotations: Record<string, Annotation[]>
   guides: Guide[]
   badges: Badge[]
@@ -51,6 +53,7 @@ interface EditorState {
   setTool: (tool: Tool) => void
   setColor: (color: string) => void
   setTextSize: (size: number) => void
+  setCalloutShape: (shape: CalloutShapeKind) => void
   resizeText: (size: number) => void
 
   addAnnotation: (shotId: ShotId, annotation: Annotation) => void
@@ -149,6 +152,7 @@ export const useEditor = create<EditorState>((set, get) => {
     tool: 'select',
     color: '#ef4444',
     textSize: DEFAULT_TEXT_SIZE,
+    calloutShape: 'circle',
     annotations: {},
     guides: [],
     badges: [],
@@ -270,6 +274,8 @@ export const useEditor = create<EditorState>((set, get) => {
     setColor: (color) => set({ color }),
 
     setTextSize: (size) => set({ textSize: clampTextSize(size) }),
+
+    setCalloutShape: (shape) => set({ calloutShape: shape }),
 
     resizeText: (size) => {
       const value = clampTextSize(size)

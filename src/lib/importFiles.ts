@@ -1,10 +1,18 @@
 import { prepareShot } from './image'
 import { useEditor } from '../store/editorStore'
+import { useGuide } from '../store/guideStore'
 
 export async function importFiles(
   files: FileList | File[] | null | undefined,
 ) {
   if (!files) return
+  if (useGuide.getState().active) {
+    const file = Array.from(files).find((item) => item.type.startsWith('image/'))
+    if (!file) return
+    const shot = await prepareShot(file).catch(() => null)
+    if (shot) useGuide.getState().pasteShot(shot)
+    return
+  }
   const state = useEditor.getState()
   const limit = state.shots.length === 0 ? 2 : 1
   const list = Array.from(files)

@@ -5,7 +5,7 @@ export const BADGE_BORDER = 'rgba(255, 255, 255, 0.28)'
 export const BADGE_TEXT = '#ffffff'
 export const BADGE_RADIUS_RATIO = 0.28
 
-export const getBadgeMetrics = (shot: Shot, text: string) => {
+export const getBadgeMetrics = (shot: Pick<Shot, 'width'>, text: string) => {
   const fontSize = Math.max(16, Math.round(shot.width / 30))
   const paddingX = Math.round(fontSize * 0.6)
   const paddingY = Math.round(fontSize * 0.35)

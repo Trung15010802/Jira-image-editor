@@ -21,17 +21,22 @@ import {
   BADGE_TEXT,
   getBadgeMetrics,
 } from '../lib/badge'
+import { buildCallout, getCalloutLayout } from '../lib/callout'
 import { newId } from '../lib/id'
 import { getBoard } from '../lib/layout'
 import { useEditor } from '../store/editorStore'
 import type {
   Annotation,
   Badge,
+  CalloutAnnotation,
   Shot,
   ShotId,
   Snapshot,
   Tool,
 } from '../types'
+import { CalloutShape } from './CalloutShape'
+import type { CalloutPart } from './CalloutShape'
+import { CalloutTextInput } from './CalloutTextInput'
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max)
@@ -72,6 +77,15 @@ interface TextDraft {
   y: number
   screenX: number
   screenY: number
+}
+
+interface CalloutEdit {
+  shotId: ShotId
+  id: string
+  left: number
+  top: number
+  initialValue: string
+  color: string
 }
 
 function ShotImage({ shot }: { shot: Shot }) {
@@ -140,6 +154,8 @@ const getAnnotationBounds = (annotation: Annotation) => {
         height: maxY - minY,
       }
     }
+    case 'callout':
+      return getCalloutLayout(annotation).bounds
     case 'text':
       return {
         x: 0,
@@ -162,6 +178,7 @@ export function CanvasArea() {
   const stageRef = useRef<Konva.Stage>(null)
   const annotationDragSnapshot = useRef<Snapshot | null>(null)
   const annotationDragOrigin = useRef<{ x: number; y: number } | null>(null)
+  const calloutDragSnapshot = useRef<Snapshot | null>(null)
   const guideDragSnapshot = useRef<Snapshot | null>(null)
   const guideDragOrigin = useRef<number | null>(null)
   const badgeDragSnapshot = useRef<Snapshot | null>(null)
@@ -174,6 +191,7 @@ export function CanvasArea() {
   const tool = useEditor((state) => state.tool)
   const color = useEditor((state) => state.color)
   const textSize = useEditor((state) => state.textSize)
+  const calloutShape = useEditor((state) => state.calloutShape)
   const annotations = useEditor((state) => state.annotations)
   const guides = useEditor((state) => state.guides)
   const badges = useEditor((state) => state.badges)
@@ -188,6 +206,7 @@ export function CanvasArea() {
   const [draft, setDraft] = useState<Draft | null>(null)
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null)
   const [textValue, setTextValue] = useState('')
+  const [calloutEdit, setCalloutEdit] = useState<CalloutEdit | null>(null)
 
   const board = useMemo(
     () => getBoard(shots, mode, activeId),
@@ -415,6 +434,24 @@ export function CanvasArea() {
           strokeWidth,
         }
       }
+    } else if (type === 'callout') {
+      const x = Math.min(startX, endX)
+      const y = Math.min(startY, endY)
+      const width = Math.abs(dx)
+      const height = Math.abs(dy)
+      if (width >= 6 && height >= 6) {
+        const state = useEditor.getState()
+        const callout = buildCallout(
+          { x, y, width, height },
+          state.calloutShape,
+          color,
+          shot.width,
+          shot.height,
+        )
+        state.addAnnotation(shotId, callout)
+        openCalloutEditor(shotId, callout)
+      }
+      return
     } else {
       const x = Math.min(startX, endX)
       const y = Math.min(startY, endY)
@@ -497,6 +534,64 @@ export function CanvasArea() {
       x: node.x(),
       y: node.y(),
     })
+  }
+
+  const openCalloutEditor = (shotId: ShotId, annotation: CalloutAnnotation) => {
+    const placement = board.placements.find(
+      (item) => item.shot.id === shotId,
+    )
+    if (!placement) return
+    const layout = getCalloutLayout(annotation)
+    setCalloutEdit({
+      shotId,
+      id: annotation.id,
+      left: (placement.x + annotation.x + layout.label.x) * view.zoom + view.x,
+      top: (placement.y + annotation.y + layout.label.y) * view.zoom + view.y,
+      initialValue: annotation.text,
+      color: annotation.color,
+    })
+    useEditor.getState().clearSelection()
+  }
+
+  const commitCalloutText = (text: string) => {
+    const edit = calloutEdit
+    setCalloutEdit(null)
+    if (!edit) return
+    const state = useEditor.getState()
+    const target = (state.annotations[edit.shotId] ?? []).find(
+      (annotation) => annotation.id === edit.id,
+    )
+    if (!target || target.type !== 'callout' || target.text === text) return
+    state.pushSnapshot(state.snapshot())
+    state.updateAnnotation(edit.shotId, edit.id, { text })
+  }
+
+  const handleCalloutDragStart = () => {
+    calloutDragSnapshot.current = useEditor.getState().snapshot()
+  }
+
+  const handleCalloutDragEnd = (
+    shotId: ShotId,
+    annotation: CalloutAnnotation,
+    part: CalloutPart,
+    x: number,
+    y: number,
+  ) => {
+    const snapshot = calloutDragSnapshot.current
+    calloutDragSnapshot.current = null
+    if (!snapshot) return
+    const before =
+      part === 'region'
+        ? { x: annotation.x, y: annotation.y }
+        : { x: annotation.labelX, y: annotation.labelY }
+    if (Math.abs(x - before.x) < 0.5 && Math.abs(y - before.y) < 0.5) return
+    const state = useEditor.getState()
+    state.pushSnapshot(snapshot)
+    state.updateAnnotation(
+      shotId,
+      annotation.id,
+      part === 'region' ? { x, y } : { labelX: x, labelY: y },
+    )
   }
 
   const handleBadgeDragStart = (badge: Badge) => {
@@ -669,6 +764,20 @@ export function CanvasArea() {
             hitStrokeWidth={Math.max(16, annotation.strokeWidth * 3)}
           />
         )
+      case 'callout':
+        return (
+          <CalloutShape
+            key={annotation.id}
+            annotation={annotation}
+            draggable={editable}
+            onSelect={() => useEditor.getState().selectAnnotation(shot.id, annotation.id)}
+            onDragStart={() => handleCalloutDragStart()}
+            onDragEnd={(part, x, y) =>
+              handleCalloutDragEnd(shot.id, annotation, part, x, y)
+            }
+            onEditText={() => openCalloutEditor(shot.id, annotation)}
+          />
+        )
       default:
         return null
     }
@@ -735,6 +844,31 @@ export function CanvasArea() {
           y={y + height / 2}
           radiusX={width / 2}
           radiusY={height / 2}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          dash={[8, 5]}
+          listening={false}
+        />
+      )
+    }
+    if (draft.type === 'callout') {
+      return calloutShape === 'circle' ? (
+        <Ellipse
+          x={x + width / 2}
+          y={y + height / 2}
+          radiusX={width / 2}
+          radiusY={height / 2}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          dash={[8, 5]}
+          listening={false}
+        />
+      ) : (
+        <Rect
+          x={x}
+          y={y}
+          width={width}
+          height={height}
           stroke={color}
           strokeWidth={strokeWidth}
           dash={[8, 5]}
@@ -922,7 +1056,7 @@ export function CanvasArea() {
               side.
             </p>
             <p className="mt-3 text-[11px] text-zinc-600">
-              Annotate with arrows, boxes, circles, text and freehand pen.
+              Annotate with arrows, boxes, circles, callouts, text and freehand pen.
               Add draggable guides to line things up.
             </p>
           </div>
@@ -963,6 +1097,17 @@ export function CanvasArea() {
             className="w-56 rounded-md border border-indigo-500 bg-zinc-900/95 px-2.5 py-1.5 text-sm shadow-xl outline-none placeholder:text-zinc-600"
           />
         </div>
+      ) : null}
+
+      {calloutEdit ? (
+        <CalloutTextInput
+          key={calloutEdit.id}
+          left={calloutEdit.left}
+          top={calloutEdit.top}
+          color={calloutEdit.color}
+          initialValue={calloutEdit.initialValue}
+          onCommit={commitCalloutText}
+        />
       ) : null}
 
       {shots.length > 0 ? (

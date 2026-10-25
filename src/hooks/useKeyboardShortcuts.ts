@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useEditor } from '../store/editorStore'
+import { useGuide } from '../store/guideStore'
 
 const isTypingTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) return false
@@ -15,6 +16,7 @@ const isTypingTarget = (target: EventTarget | null) => {
 export function useKeyboardShortcuts() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (useGuide.getState().active) return
       if (isTypingTarget(event.target)) {
         if (event.key === 'Escape') (event.target as HTMLElement).blur()
         return
@@ -91,6 +93,10 @@ export function useKeyboardShortcuts() {
         case 'p':
         case 'P':
           state.setTool('pen')
+          break
+        case 'k':
+        case 'K':
+          state.setTool('callout')
           break
         case 't':
         case 'T':
