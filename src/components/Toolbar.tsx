@@ -1,12 +1,12 @@
 import {
   ArrowUpRight,
+  Circle,
   Columns2,
   Download,
-  Eraser,
-  Highlighter,
   ImagePlus,
   Minus,
   MousePointer2,
+  Pencil,
   Plus,
   Redo2,
   SeparatorHorizontal,
@@ -31,9 +31,9 @@ const TOOLS: { id: Tool; label: string; shortcut: string; icon: ReactNode }[] = 
   { id: 'select', label: 'Select / move', shortcut: 'V', icon: <MousePointer2 className="h-4 w-4" /> },
   { id: 'arrow', label: 'Arrow', shortcut: 'A', icon: <ArrowUpRight className="h-4 w-4" /> },
   { id: 'box', label: 'Rectangle', shortcut: 'R', icon: <Square className="h-4 w-4" /> },
+  { id: 'ellipse', label: 'Circle / Ellipse', shortcut: 'C', icon: <Circle className="h-4 w-4" /> },
+  { id: 'pen', label: 'Pen', shortcut: 'P', icon: <Pencil className="h-4 w-4" /> },
   { id: 'text', label: 'Text label', shortcut: 'T', icon: <Type className="h-4 w-4" /> },
-  { id: 'highlight', label: 'Highlight', shortcut: 'H', icon: <Highlighter className="h-4 w-4" /> },
-  { id: 'redact', label: 'Redact', shortcut: 'X', icon: <Eraser className="h-4 w-4" /> },
 ]
 
 const BADGE_OPTIONS: { id: BadgeStyle; label: string; hint: string }[] = [

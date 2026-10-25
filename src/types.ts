@@ -6,7 +6,7 @@ export type Orientation = 'horizontal' | 'vertical'
 
 export type BadgeStyle = 'none' | 'number' | 'beforeAfter'
 
-export type Tool = 'select' | 'arrow' | 'box' | 'text' | 'highlight' | 'redact'
+export type Tool = 'select' | 'arrow' | 'box' | 'ellipse' | 'text' | 'pen'
 
 export interface Shot {
   id: ShotId
@@ -38,6 +38,17 @@ export interface BoxAnnotation {
   strokeWidth: number
 }
 
+export interface EllipseAnnotation {
+  id: string
+  type: 'ellipse'
+  x: number
+  y: number
+  radiusX: number
+  radiusY: number
+  color: string
+  strokeWidth: number
+}
+
 export interface TextAnnotation {
   id: string
   type: 'text'
@@ -48,20 +59,22 @@ export interface TextAnnotation {
   fontSize: number
 }
 
-export interface AreaAnnotation {
+export interface PenAnnotation {
   id: string
-  type: 'highlight' | 'redact'
+  type: 'pen'
   x: number
   y: number
-  width: number
-  height: number
+  points: number[]
+  color: string
+  strokeWidth: number
 }
 
 export type Annotation =
   | ArrowAnnotation
   | BoxAnnotation
+  | EllipseAnnotation
   | TextAnnotation
-  | AreaAnnotation
+  | PenAnnotation
 
 export interface Guide {
   id: string

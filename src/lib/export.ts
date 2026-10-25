@@ -70,30 +70,42 @@ const drawAnnotation = (
         annotation.height,
       )
       break
+    case 'ellipse':
+      ctx.strokeStyle = annotation.color
+      ctx.lineWidth = annotation.strokeWidth
+      ctx.beginPath()
+      ctx.ellipse(
+        annotation.x,
+        annotation.y,
+        annotation.radiusX,
+        annotation.radiusY,
+        0,
+        0,
+        Math.PI * 2,
+      )
+      ctx.stroke()
+      break
     case 'text':
       ctx.fillStyle = annotation.color
       ctx.textBaseline = 'top'
       ctx.font = `600 ${annotation.fontSize}px ui-sans-serif, system-ui, sans-serif`
       ctx.fillText(annotation.text, annotation.x, annotation.y)
       break
-    case 'highlight':
-      ctx.fillStyle = 'rgba(250, 204, 21, 0.42)'
-      ctx.fillRect(
-        annotation.x,
-        annotation.y,
-        annotation.width,
-        annotation.height,
-      )
+    case 'pen': {
+      const { x, y, points } = annotation
+      if (points.length < 4) break
+      ctx.strokeStyle = annotation.color
+      ctx.lineWidth = annotation.strokeWidth
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.beginPath()
+      ctx.moveTo(x + points[0], y + points[1])
+      for (let i = 2; i < points.length; i += 2) {
+        ctx.lineTo(x + points[i], y + points[i + 1])
+      }
+      ctx.stroke()
       break
-    case 'redact':
-      ctx.fillStyle = '#0a0a0a'
-      ctx.fillRect(
-        annotation.x,
-        annotation.y,
-        annotation.width,
-        annotation.height,
-      )
-      break
+    }
     default:
       break
   }

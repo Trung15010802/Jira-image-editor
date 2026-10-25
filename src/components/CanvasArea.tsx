@@ -4,6 +4,7 @@ import { Maximize, Minus, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Arrow,
+  Ellipse,
   Group,
   Image as KonvaImage,
   Layer,
@@ -25,7 +26,6 @@ import { getBoard } from '../lib/layout'
 import { useEditor } from '../store/editorStore'
 import type {
   Annotation,
-  AreaAnnotation,
   Badge,
   Shot,
   ShotId,
@@ -63,6 +63,7 @@ interface Draft {
   startY: number
   endX: number
   endY: number
+  points: number[]
 }
 
 interface TextDraft {
@@ -118,6 +119,27 @@ const getAnnotationBounds = (annotation: Annotation) => {
         width: Math.abs(annotation.dx),
         height: Math.abs(annotation.dy),
       }
+    case 'ellipse':
+      return {
+        x: -annotation.radiusX,
+        y: -annotation.radiusY,
+        width: annotation.radiusX * 2,
+        height: annotation.radiusY * 2,
+      }
+    case 'pen': {
+      const xs = annotation.points.filter((_, index) => index % 2 === 0)
+      const ys = annotation.points.filter((_, index) => index % 2 === 1)
+      const minX = xs.reduce((min, value) => Math.min(min, value), Infinity)
+      const minY = ys.reduce((min, value) => Math.min(min, value), Infinity)
+      const maxX = xs.reduce((max, value) => Math.max(max, value), -Infinity)
+      const maxY = ys.reduce((max, value) => Math.max(max, value), -Infinity)
+      return {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+      }
+    }
     case 'text':
       return {
         x: 0,
@@ -322,6 +344,7 @@ export function CanvasArea() {
       startY: position.y,
       endX: position.x,
       endY: position.y,
+      points: [position.x, position.y],
     })
     useEditor.getState().clearSelection()
   }
@@ -335,15 +358,17 @@ export function CanvasArea() {
     )
     if (!placement) return
     const world = screenToWorld(pointer)
-    setDraft((current) =>
-      current
-        ? {
-            ...current,
-            endX: clamp(world.x - placement.x, 0, placement.shot.width),
-            endY: clamp(world.y - placement.y, 0, placement.shot.height),
-          }
-        : current,
-    )
+    setDraft((current) => {
+      if (!current) return current
+      const x = clamp(world.x - placement.x, 0, placement.shot.width)
+      const y = clamp(world.y - placement.y, 0, placement.shot.height)
+      return {
+        ...current,
+        endX: x,
+        endY: y,
+        points: current.type === 'pen' ? [...current.points, x, y] : current.points,
+      }
+    })
   }
 
   const handleStageMouseUp = () => {
@@ -355,7 +380,7 @@ export function CanvasArea() {
     if (!placement) return
 
     const shot = placement.shot
-    const { startX, startY, endX, endY, shotId, type } = draft
+    const { startX, startY, endX, endY, shotId, type, points } = draft
     const dx = endX - startX
     const dy = endY - startY
     const strokeWidth = Math.max(3, Math.round(shot.width / 400))
@@ -374,13 +399,40 @@ export function CanvasArea() {
           strokeWidth,
         }
       }
+    } else if (type === 'pen') {
+      if (points.length >= 4) {
+        const originX = points[0]
+        const originY = points[1]
+        annotation = {
+          id: newId('pen'),
+          type: 'pen',
+          x: originX,
+          y: originY,
+          points: points.map((value, index) =>
+            index % 2 === 0 ? value - originX : value - originY,
+          ),
+          color,
+          strokeWidth,
+        }
+      }
     } else {
       const x = Math.min(startX, endX)
       const y = Math.min(startY, endY)
       const width = Math.abs(dx)
       const height = Math.abs(dy)
       if (width >= 6 && height >= 6) {
-        if (type === 'box') {
+        if (type === 'ellipse') {
+          annotation = {
+            id: newId('ellipse'),
+            type: 'ellipse',
+            x: x + width / 2,
+            y: y + height / 2,
+            radiusX: width / 2,
+            radiusY: height / 2,
+            color,
+            strokeWidth,
+          }
+        } else {
           annotation = {
             id: newId('box'),
             type: 'box',
@@ -391,15 +443,6 @@ export function CanvasArea() {
             color,
             strokeWidth,
           }
-        } else {
-          annotation = {
-            id: newId(type),
-            type,
-            x,
-            y,
-            width,
-            height,
-          } satisfies AreaAnnotation
         }
       }
     }
@@ -597,28 +640,33 @@ export function CanvasArea() {
             fontFamily="ui-sans-serif, system-ui, sans-serif"
           />
         )
-      case 'highlight':
+      case 'ellipse':
         return (
-          <Rect
+          <Ellipse
             key={annotation.id}
             {...common}
             x={annotation.x}
             y={annotation.y}
-            width={annotation.width}
-            height={annotation.height}
-            fill="rgba(250, 204, 21, 0.42)"
+            radiusX={annotation.radiusX}
+            radiusY={annotation.radiusY}
+            stroke={annotation.color}
+            strokeWidth={annotation.strokeWidth}
+            hitStrokeWidth={Math.max(16, annotation.strokeWidth * 3)}
           />
         )
-      case 'redact':
+      case 'pen':
         return (
-          <Rect
+          <Line
             key={annotation.id}
             {...common}
             x={annotation.x}
             y={annotation.y}
-            width={annotation.width}
-            height={annotation.height}
-            fill="#0a0a0a"
+            points={annotation.points}
+            stroke={annotation.color}
+            strokeWidth={annotation.strokeWidth}
+            lineCap="round"
+            lineJoin="round"
+            hitStrokeWidth={Math.max(16, annotation.strokeWidth * 3)}
           />
         )
       default:
@@ -680,14 +728,27 @@ export function CanvasArea() {
         />
       )
     }
+    if (draft.type === 'ellipse') {
+      return (
+        <Ellipse
+          x={x + width / 2}
+          y={y + height / 2}
+          radiusX={width / 2}
+          radiusY={height / 2}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          dash={[8, 5]}
+          listening={false}
+        />
+      )
+    }
     return (
-      <Rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        fill={draft.type === 'highlight' ? 'rgba(250, 204, 21, 0.42)' : '#0a0a0a'}
-        opacity={draft.type === 'redact' ? 0.75 : 1}
+      <Line
+        points={draft.points}
+        stroke={color}
+        strokeWidth={strokeWidth}
+        lineCap="round"
+        lineJoin="round"
         listening={false}
       />
     )
@@ -861,7 +922,7 @@ export function CanvasArea() {
               side.
             </p>
             <p className="mt-3 text-[11px] text-zinc-600">
-              Annotate with arrows, boxes, text, highlights and redaction.
+              Annotate with arrows, boxes, circles, text and freehand pen.
               Add draggable guides to line things up.
             </p>
           </div>

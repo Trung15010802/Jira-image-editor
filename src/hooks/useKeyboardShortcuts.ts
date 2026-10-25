@@ -84,17 +84,17 @@ export function useKeyboardShortcuts() {
         case 'R':
           state.setTool('box')
           break
+        case 'c':
+        case 'C':
+          state.setTool('ellipse')
+          break
+        case 'p':
+        case 'P':
+          state.setTool('pen')
+          break
         case 't':
         case 'T':
           state.setTool('text')
-          break
-        case 'h':
-        case 'H':
-          state.setTool('highlight')
-          break
-        case 'x':
-        case 'X':
-          state.setTool('redact')
           break
         case ' ':
           event.preventDefault()
