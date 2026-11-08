@@ -232,6 +232,7 @@ export function GuideCanvas() {
   const tool = useGuide((state) => state.tool)
   const color = useGuide((state) => state.color)
   const textSize = useGuide((state) => state.textSize)
+  const calloutTextSize = useGuide((state) => state.calloutTextSize)
   const calloutShape = useGuide((state) => state.calloutShape)
   const selectedAnnotationId = useGuide((state) => state.selectedAnnotationId)
 
@@ -416,9 +417,12 @@ export function GuideCanvas() {
     const state = useGuide.getState()
     const step = state.steps.find((item) => item.id === edit.stepId)
     const target = step?.annotations.find((annotation) => annotation.id === edit.id)
-    if (!target || target.type !== 'callout' || target.text === text) return
-    state.pushHistory(state.steps)
-    state.updateAnnotation(edit.stepId, edit.id, { text })
+    if (!target || target.type !== 'callout') return
+    if (target.text !== text) {
+      state.pushHistory(state.steps)
+      state.updateAnnotation(edit.stepId, edit.id, { text })
+    }
+    state.selectAnnotation(edit.id)
   }
 
   const handleCalloutDragStart = () => {
@@ -465,6 +469,7 @@ export function GuideCanvas() {
         color,
         shot.width,
         shot.height,
+        calloutTextSize,
       )
       useGuide.getState().addAnnotation(step.id, callout)
       openCalloutEditor(step.id, callout)
@@ -598,6 +603,8 @@ export function GuideCanvas() {
             key={annotation.id}
             annotation={annotation}
             draggable={editable}
+            labelDraggable={!spaceDown}
+            selected={selectedAnnotationId === annotation.id}
             onSelect={() => useGuide.getState().selectAnnotation(annotation.id)}
             onDragStart={() => handleCalloutDragStart()}
             onDragEnd={(part, x, y) =>

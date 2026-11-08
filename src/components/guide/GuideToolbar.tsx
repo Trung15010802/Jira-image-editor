@@ -18,6 +18,7 @@ import {
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { exportGuide } from '../../lib/guideExport'
+import { calloutFontSize } from '../../lib/callout'
 import { CalloutShapeToggle } from '../CalloutShapeToggle'
 import { useGuide } from '../../store/guideStore'
 import type { Tool } from '../../types'
@@ -76,9 +77,11 @@ export function GuideToolbar() {
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const steps = useGuide((state) => state.steps)
+  const activeStepId = useGuide((state) => state.activeStepId)
   const tool = useGuide((state) => state.tool)
   const color = useGuide((state) => state.color)
   const textSize = useGuide((state) => state.textSize)
+  const calloutTextSize = useGuide((state) => state.calloutTextSize)
   const calloutShape = useGuide((state) => state.calloutShape)
   const setCalloutShape = useGuide((state) => state.setCalloutShape)
   const selectedAnnotationId = useGuide((state) => state.selectedAnnotationId)
@@ -88,6 +91,7 @@ export function GuideToolbar() {
   const setTool = useGuide((state) => state.setTool)
   const setColor = useGuide((state) => state.setColor)
   const resizeText = useGuide((state) => state.resizeText)
+  const resizeCallout = useGuide((state) => state.resizeCallout)
   const removeSelected = useGuide((state) => state.removeSelected)
   const undo = useGuide((state) => state.undo)
   const redo = useGuide((state) => state.redo)
@@ -99,9 +103,27 @@ export function GuideToolbar() {
         annotation.id === state.selectedAnnotationId && annotation.type === 'text',
     )
   })
+  const selectedCallout = useGuide((state) => {
+    const step = state.steps.find((item) => item.id === state.activeStepId)
+    return step?.annotations.find(
+      (annotation) =>
+        annotation.id === state.selectedAnnotationId &&
+        annotation.type === 'callout',
+    )
+  })
+  const activeStep = steps.find((item) => item.id === activeStepId)
+  const calloutMode = Boolean(selectedCallout) || tool === 'callout'
   const activeTextSize = selectedText?.type === 'text' ? selectedText.fontSize : textSize
-  const canResizeText = tool === 'text' || selectedText?.type === 'text'
-  const textStep = activeTextSize < 48 ? 4 : 8
+  const activeCalloutSize =
+    selectedCallout?.type === 'callout'
+      ? selectedCallout.fontSize
+      : (calloutTextSize ??
+        (activeStep?.shot ? calloutFontSize(activeStep.shot.width) : textSize))
+  const activeSize = calloutMode ? activeCalloutSize : activeTextSize
+  const canResizeSize =
+    calloutMode || tool === 'text' || selectedText?.type === 'text'
+  const resizeSize = calloutMode ? resizeCallout : resizeText
+  const textStep = activeSize < 48 ? 4 : 8
 
   const handleExport = async () => {
     setExporting(true)
@@ -182,30 +204,34 @@ export function GuideToolbar() {
       <div
         className="ml-1 flex items-center rounded-md border border-zinc-800 bg-zinc-900"
         title={
-          selectedText?.type === 'text'
-            ? 'Selected text size (px)'
-            : 'Text size for new labels (px)'
+          calloutMode
+            ? selectedCallout
+              ? 'Selected callout label size (px)'
+              : 'Callout label size for new callouts (px)'
+            : selectedText?.type === 'text'
+              ? 'Selected text size (px)'
+              : 'Text size for new labels (px)'
         }
       >
         <button
           type="button"
-          title={`Decrease text size (-${textStep}px)`}
-          aria-label="Decrease text size"
-          disabled={!canResizeText}
-          onClick={() => resizeText(activeTextSize - textStep)}
+          title={`Decrease size (-${textStep}px)`}
+          aria-label="Decrease size"
+          disabled={!canResizeSize}
+          onClick={() => resizeSize(activeSize - textStep)}
           className="px-1.5 py-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-30"
         >
           <Minus className="h-3.5 w-3.5" />
         </button>
         <span className="min-w-8 text-center text-[11px] tabular-nums text-zinc-300">
-          {activeTextSize}
+          {activeSize}
         </span>
         <button
           type="button"
-          title={`Increase text size (+${textStep}px)`}
-          aria-label="Increase text size"
-          disabled={!canResizeText}
-          onClick={() => resizeText(activeTextSize + textStep)}
+          title={`Increase size (+${textStep}px)`}
+          aria-label="Increase size"
+          disabled={!canResizeSize}
+          onClick={() => resizeSize(activeSize + textStep)}
           className="px-1.5 py-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-30"
         >
           <Plus className="h-3.5 w-3.5" />

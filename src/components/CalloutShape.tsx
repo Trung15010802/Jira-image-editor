@@ -8,15 +8,24 @@ export type CalloutPart = 'region' | 'label'
 interface CalloutShapeProps {
   annotation: CalloutAnnotation
   draggable: boolean
+  labelDraggable?: boolean
+  selected?: boolean
   onSelect: () => void
   onDragStart: (part: CalloutPart) => void
   onDragEnd: (part: CalloutPart, x: number, y: number) => void
   onEditText: () => void
 }
 
+const setCursor = (event: KonvaEventObject<MouseEvent>, cursor: string) => {
+  const stage = event.target.getStage()
+  if (stage) stage.container().style.cursor = cursor
+}
+
 export function CalloutShape({
   annotation,
   draggable,
+  labelDraggable,
+  selected,
   onSelect,
   onDragStart,
   onDragEnd,
@@ -25,6 +34,7 @@ export function CalloutShape({
   const layout = getCalloutLayout(annotation)
   const { width, height, shape, color, strokeWidth, fontSize, text } = annotation
   const hasText = text.trim().length > 0
+  const canDragLabel = labelDraggable ?? draggable
   const select = (event: KonvaEventObject<MouseEvent | TouchEvent>) => {
     event.cancelBubble = true
     onSelect()
@@ -41,6 +51,10 @@ export function CalloutShape({
         stroke={color}
         strokeWidth={strokeWidth}
         hitStrokeWidth={Math.max(16, strokeWidth * 3)}
+        onMouseEnter={(event) => {
+          if (draggable) setCursor(event, 'move')
+        }}
+        onMouseLeave={(event) => setCursor(event, '')}
       />
     ) : (
       <Rect
@@ -50,6 +64,10 @@ export function CalloutShape({
         stroke={color}
         strokeWidth={strokeWidth}
         hitStrokeWidth={Math.max(16, strokeWidth * 3)}
+        onMouseEnter={(event) => {
+          if (draggable) setCursor(event, 'move')
+        }}
+        onMouseLeave={(event) => setCursor(event, '')}
       />
     )
 
@@ -57,9 +75,13 @@ export function CalloutShape({
     <Group
       x={layout.label.x}
       y={layout.label.y}
-      draggable={draggable}
+      draggable={canDragLabel}
       onMouseDown={select}
       onTap={select}
+      onMouseEnter={(event) => {
+        if (canDragLabel) setCursor(event, 'move')
+      }}
+      onMouseLeave={(event) => setCursor(event, '')}
       onDblClick={(event) => {
         event.cancelBubble = true
         onEditText()
@@ -80,6 +102,18 @@ export function CalloutShape({
         fill={color}
         cornerRadius={layout.label.height * 0.28}
       />
+      {selected && canDragLabel ? (
+        <Rect
+          width={layout.label.width}
+          height={layout.label.height}
+          stroke="#38bdf8"
+          strokeWidth={1.5}
+          strokeScaleEnabled={false}
+          dash={[4, 3]}
+          cornerRadius={layout.label.height * 0.28}
+          listening={false}
+        />
+      ) : null}
       <Text
         text={text}
         width={layout.label.width}
@@ -99,9 +133,13 @@ export function CalloutShape({
       y={layout.label.y}
       radius={layout.dotRadius}
       fill={color}
-      draggable={draggable}
+      draggable={canDragLabel}
       onMouseDown={select}
       onTap={select}
+      onMouseEnter={(event) => {
+        if (canDragLabel) setCursor(event, 'move')
+      }}
+      onMouseLeave={(event) => setCursor(event, '')}
       onDblClick={(event) => {
         event.cancelBubble = true
         onEditText()

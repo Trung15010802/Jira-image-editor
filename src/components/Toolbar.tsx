@@ -21,9 +21,10 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { importFiles } from '../lib/importFiles'
+import { calloutFontSize } from '../lib/callout'
 import { CalloutShapeToggle } from './CalloutShapeToggle'
 import { useEditor } from '../store/editorStore'
 import { useGuide } from '../store/guideStore'
@@ -45,6 +46,7 @@ const BADGE_OPTIONS: { id: BadgeStyle; label: string; hint: string }[] = [
   { id: 'none', label: 'No badge', hint: 'Off' },
   { id: 'number', label: 'Numbers', hint: '1 · 2' },
   { id: 'beforeAfter', label: 'Before / After', hint: 'A · B' },
+  { id: 'custom', label: 'Custom text', hint: 'Type below' },
 ]
 
 const baseButton =
@@ -89,6 +91,57 @@ function Divider() {
   return <div className="mx-1 h-6 w-px shrink-0 bg-zinc-800" />
 }
 
+function BadgeTextEditor({
+  badgeId,
+  value,
+  onCommit,
+}: {
+  badgeId: string | undefined
+  value: string
+  onCommit: (text: string) => void
+}) {
+  const [text, setText] = useState(value)
+
+  useEffect(() => {
+    setText(value)
+  }, [badgeId, value])
+
+  const commit = () => {
+    const next = text.trim()
+    if (next !== value.trim()) onCommit(next)
+  }
+
+  return (
+    <div className="mt-1 border-t border-zinc-800 px-1.5 pb-1 pt-2">
+      <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+        Custom badge text
+      </label>
+      <input
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            commit()
+            event.currentTarget.blur()
+          }
+          if (event.key === 'Escape') {
+            setText(value)
+            event.currentTarget.blur()
+          }
+        }}
+        placeholder="e.g. ISSUE-142"
+        className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-indigo-500"
+      />
+      <p className="mt-1 text-[10px] leading-snug text-zinc-600">
+        Applies to the selected badge (or the active image). Type text and press
+        Enter to add a badge.
+      </p>
+    </div>
+  )
+}
+
 export function Toolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [badgeMenuOpen, setBadgeMenuOpen] = useState(false)
@@ -100,11 +153,13 @@ export function Toolbar() {
   const guides = useEditor((state) => state.guides)
   const annotations = useEditor((state) => state.annotations)
   const textSize = useEditor((state) => state.textSize)
+  const calloutTextSize = useEditor((state) => state.calloutTextSize)
   const calloutShape = useEditor((state) => state.calloutShape)
   const setCalloutShape = useEditor((state) => state.setCalloutShape)
   const selectedAnnotation = useEditor((state) => state.selectedAnnotation)
   const selectedGuideId = useEditor((state) => state.selectedGuideId)
   const selectedBadgeId = useEditor((state) => state.selectedBadgeId)
+  const badges = useEditor((state) => state.badges)
   const badgeStyle = useEditor((state) => state.badgeStyle)
   const canUndo = useEditor((state) => state.past.length > 0)
   const canRedo = useEditor((state) => state.future.length > 0)
@@ -117,6 +172,8 @@ export function Toolbar() {
   const addGuide = useEditor((state) => state.addGuide)
   const clearGuides = useEditor((state) => state.clearGuides)
   const setBadgeStyle = useEditor((state) => state.setBadgeStyle)
+  const resizeCallout = useEditor((state) => state.resizeCallout)
+  const setBadgeText = useEditor((state) => state.setBadgeText)
   const removeSelected = useEditor((state) => state.removeSelected)
   const undo = useEditor((state) => state.undo)
   const redo = useEditor((state) => state.redo)
@@ -133,10 +190,31 @@ export function Toolbar() {
           annotation.id === selectedAnnotation.id && annotation.type === 'text',
       )
     : undefined
+  const selectedCallout = selectedAnnotation
+    ? (annotations[selectedAnnotation.shotId] ?? []).find(
+        (annotation) =>
+          annotation.id === selectedAnnotation.id &&
+          annotation.type === 'callout',
+      )
+    : undefined
+  const activeShot = shots.find((shot) => shot.id === activeId) ?? shots[0]
+  const calloutMode = Boolean(selectedCallout) || tool === 'callout'
   const activeTextSize =
     selectedText?.type === 'text' ? selectedText.fontSize : textSize
-  const canResizeText = tool === 'text' || selectedText?.type === 'text'
-  const textStep = activeTextSize < 48 ? 4 : 8
+  const activeCalloutSize =
+    selectedCallout?.type === 'callout'
+      ? selectedCallout.fontSize
+      : (calloutTextSize ??
+        (activeShot ? calloutFontSize(activeShot.width) : textSize))
+  const activeSize = calloutMode ? activeCalloutSize : activeTextSize
+  const canResizeSize =
+    calloutMode || tool === 'text' || selectedText?.type === 'text'
+  const resizeSize = calloutMode ? resizeCallout : resizeText
+  const textStep = activeSize < 48 ? 4 : 8
+
+  const targetBadge =
+    badges.find((badge) => badge.id === selectedBadgeId) ??
+    badges.find((badge) => badge.shotId === activeShot?.id)
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-1 border-b border-zinc-800 bg-zinc-950 px-2.5">
@@ -280,30 +358,34 @@ export function Toolbar() {
       <div
         className="ml-1 flex items-center rounded-md border border-zinc-800 bg-zinc-900"
         title={
-          selectedText?.type === 'text'
-            ? 'Selected text size (px)'
-            : 'Text size for new labels (px)'
+          calloutMode
+            ? selectedCallout
+              ? 'Selected callout label size (px)'
+              : 'Callout label size for new callouts (px)'
+            : selectedText?.type === 'text'
+              ? 'Selected text size (px)'
+              : 'Text size for new labels (px)'
         }
       >
         <button
           type="button"
-          title={`Decrease text size (-${textStep}px)`}
-          aria-label="Decrease text size"
-          disabled={!canResizeText}
-          onClick={() => resizeText(activeTextSize - textStep)}
+          title={`Decrease size (-${textStep}px)`}
+          aria-label="Decrease size"
+          disabled={!canResizeSize}
+          onClick={() => resizeSize(activeSize - textStep)}
           className="px-1.5 py-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-30"
         >
           <Minus className="h-3.5 w-3.5" />
         </button>
         <span className="min-w-8 text-center text-[11px] tabular-nums text-zinc-300">
-          {activeTextSize}
+          {activeSize}
         </span>
         <button
           type="button"
-          title={`Increase text size (+${textStep}px)`}
-          aria-label="Increase text size"
-          disabled={!canResizeText}
-          onClick={() => resizeText(activeTextSize + textStep)}
+          title={`Increase size (+${textStep}px)`}
+          aria-label="Increase size"
+          disabled={!canResizeSize}
+          onClick={() => resizeSize(activeSize + textStep)}
           className="px-1.5 py-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-30"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -364,14 +446,14 @@ export function Toolbar() {
               className="fixed inset-0 z-30"
               onClick={() => setBadgeMenuOpen(false)}
             />
-            <div className="absolute left-0 top-9 z-40 w-52 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-2xl">
+            <div className="absolute left-0 top-9 z-40 w-64 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-2xl">
               {BADGE_OPTIONS.map((option) => (
                 <button
                   key={option.id}
                   type="button"
                   onClick={() => {
                     setBadgeStyle(option.id)
-                    setBadgeMenuOpen(false)
+                    if (option.id !== 'custom') setBadgeMenuOpen(false)
                   }}
                   className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition ${
                     badgeStyle === option.id
@@ -385,9 +467,19 @@ export function Toolbar() {
                   </span>
                 </button>
               ))}
+              {hasShots ? (
+                <BadgeTextEditor
+                  badgeId={targetBadge?.id}
+                  value={targetBadge?.text ?? ''}
+                  onCommit={(text) => {
+                    const shotId = targetBadge?.shotId ?? activeShot?.id
+                    if (shotId) setBadgeText(shotId, text)
+                  }}
+                />
+              ) : null}
               <div className="mt-1 border-t border-zinc-800 px-2.5 py-1.5 text-[10px] leading-snug text-zinc-600">
-                Drag a badge on the image to reposition it. Select it and press
-                Delete to remove it.
+                Drag a badge on the image to reposition it, or double-click it to
+                edit the text. Select it and press Delete to remove it.
               </div>
             </div>
           </>

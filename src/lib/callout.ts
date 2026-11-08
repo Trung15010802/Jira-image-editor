@@ -109,8 +109,12 @@ export const buildCallout = (
   color: string,
   imageWidth: number,
   imageHeight: number,
+  fontSizeOverride?: number | null,
 ): CalloutAnnotation => {
-  const fontSize = calloutFontSize(imageWidth)
+  const fontSize =
+    fontSizeOverride && fontSizeOverride > 0
+      ? Math.round(fontSizeOverride)
+      : calloutFontSize(imageWidth)
   const gap = Math.max(40, Math.round(fontSize * 2.5))
   const cardSpace = fontSize * 12
   const placeRight = region.x + region.width + gap + cardSpace <= imageWidth

@@ -23,6 +23,7 @@ interface GuideState {
   tool: Tool
   color: string
   textSize: number
+  calloutTextSize: number | null
   calloutShape: CalloutShapeKind
   past: GuideStep[][]
   future: GuideStep[][]
@@ -40,6 +41,7 @@ interface GuideState {
   setTextSize: (size: number) => void
   setCalloutShape: (shape: CalloutShapeKind) => void
   resizeText: (size: number) => void
+  resizeCallout: (size: number) => void
 
   addAnnotation: (stepId: string, annotation: Annotation) => void
   updateAnnotation: (stepId: string, id: string, patch: Partial<Annotation>) => void
@@ -87,6 +89,7 @@ export const useGuide = create<GuideState>((set, get) => {
     tool: 'select',
     color: '#ef4444',
     textSize: DEFAULT_GUIDE_TEXT_SIZE,
+    calloutTextSize: null,
     calloutShape: 'circle',
     past: [],
     future: [],
@@ -178,6 +181,30 @@ export const useGuide = create<GuideState>((set, get) => {
           ),
         })),
       )
+    },
+
+    resizeCallout: (size) => {
+      const value = clampTextSize(size)
+      const { steps, activeStepId, selectedAnnotationId } = get()
+      const step = steps.find((item) => item.id === activeStepId)
+      const target = step?.annotations.find(
+        (annotation) => annotation.id === selectedAnnotationId,
+      )
+      if (!step || target?.type !== 'callout') {
+        set({ calloutTextSize: value })
+        return
+      }
+      commit(
+        mapStep(steps, step.id, (item) => ({
+          ...item,
+          annotations: item.annotations.map((annotation) =>
+            annotation.id === target.id
+              ? { ...annotation, fontSize: value }
+              : annotation,
+          ),
+        })),
+      )
+      set({ calloutTextSize: value })
     },
 
     addAnnotation: (stepId, annotation) => {

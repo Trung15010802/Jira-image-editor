@@ -34,6 +34,7 @@ interface EditorState {
   tool: Tool
   color: string
   textSize: number
+  calloutTextSize: number | null
   calloutShape: CalloutShapeKind
   annotations: Record<string, Annotation[]>
   guides: Guide[]
@@ -55,6 +56,7 @@ interface EditorState {
   setTextSize: (size: number) => void
   setCalloutShape: (shape: CalloutShapeKind) => void
   resizeText: (size: number) => void
+  resizeCallout: (size: number) => void
 
   addAnnotation: (shotId: ShotId, annotation: Annotation) => void
   updateAnnotation: (
@@ -74,6 +76,7 @@ interface EditorState {
 
   setBadgeStyle: (style: BadgeStyle) => void
   updateBadge: (id: string, patch: Partial<Pick<Badge, 'x' | 'y' | 'text'>>) => void
+  setBadgeText: (shotId: ShotId, text: string) => void
   selectBadge: (id: string) => void
   removeBadge: (id: string) => void
 
@@ -121,7 +124,13 @@ const buildBadges = (
   return ordered.map((shot, index) => {
     const previous = existing.find((badge) => badge.shotId === shot.id)
     const text =
-      style === 'number' ? String(index + 1) : index === 0 ? 'Before' : 'After'
+      style === 'number'
+        ? String(index + 1)
+        : style === 'beforeAfter'
+          ? index === 0
+            ? 'Before'
+            : 'After'
+          : (previous?.text ?? shot.id.toUpperCase())
     return {
       id: previous?.id ?? makeId('badge'),
       shotId: shot.id,
@@ -152,6 +161,7 @@ export const useEditor = create<EditorState>((set, get) => {
     tool: 'select',
     color: '#ef4444',
     textSize: DEFAULT_TEXT_SIZE,
+    calloutTextSize: null,
     calloutShape: 'circle',
     annotations: {},
     guides: [],
@@ -307,6 +317,37 @@ export const useEditor = create<EditorState>((set, get) => {
       }))
     },
 
+    resizeCallout: (size) => {
+      const value = clampTextSize(size)
+      const { selectedAnnotation, annotations } = get()
+      const target = selectedAnnotation
+        ? (annotations[selectedAnnotation.shotId] ?? []).find(
+            (annotation) =>
+              annotation.id === selectedAnnotation.id &&
+              annotation.type === 'callout',
+          )
+        : undefined
+
+      if (!selectedAnnotation || !target) {
+        set({ calloutTextSize: value })
+        return
+      }
+
+      const shotId = selectedAnnotation.shotId
+      const targetId = target.id
+      commit((state) => ({
+        calloutTextSize: value,
+        annotations: {
+          ...state.annotations,
+          [shotId]: (state.annotations[shotId] ?? []).map((annotation) =>
+            annotation.id === targetId
+              ? ({ ...annotation, fontSize: value } as Annotation)
+              : annotation,
+          ),
+        },
+      }))
+    },
+
     addAnnotation: (shotId, annotation) =>
       commit((state) => ({
         annotations: {
@@ -433,6 +474,45 @@ export const useEditor = create<EditorState>((set, get) => {
           badge.id === id ? { ...badge, ...patch } : badge,
         ),
       })),
+
+    setBadgeText: (shotId, text) => {
+      const badgeText = text.trim()
+      const current = get().badges.find((badge) => badge.shotId === shotId)
+      if (!badgeText && !current) return
+      commit((state) => {
+        const existing = state.badges.find((badge) => badge.shotId === shotId)
+        if (!badgeText) {
+          if (!existing) return {}
+          return {
+            badges: state.badges.filter((badge) => badge.id !== existing.id),
+            selectedBadgeId:
+              state.selectedBadgeId === existing.id
+                ? null
+                : state.selectedBadgeId,
+          }
+        }
+        if (existing) {
+          return {
+            badges: state.badges.map((badge) =>
+              badge.id === existing.id ? { ...badge, text: badgeText } : badge,
+            ),
+            selectedBadgeId: existing.id,
+          }
+        }
+        const badge: Badge = {
+          id: makeId('badge'),
+          shotId,
+          text: badgeText,
+          x: 18,
+          y: 18,
+        }
+        return {
+          badges: [...state.badges, badge],
+          badgeStyle: state.badgeStyle === 'none' ? 'custom' : state.badgeStyle,
+          selectedBadgeId: badge.id,
+        }
+      })
+    },
 
     selectBadge: (id) =>
       set({

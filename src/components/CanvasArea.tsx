@@ -37,6 +37,7 @@ import type {
 import { CalloutShape } from './CalloutShape'
 import type { CalloutPart } from './CalloutShape'
 import { CalloutTextInput } from './CalloutTextInput'
+import { BadgeTextInput } from './BadgeTextInput'
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max)
@@ -86,6 +87,14 @@ interface CalloutEdit {
   top: number
   initialValue: string
   color: string
+}
+
+interface BadgeEdit {
+  shotId: ShotId
+  id: string
+  left: number
+  top: number
+  initialValue: string
 }
 
 function ShotImage({ shot }: { shot: Shot }) {
@@ -191,6 +200,7 @@ export function CanvasArea() {
   const tool = useEditor((state) => state.tool)
   const color = useEditor((state) => state.color)
   const textSize = useEditor((state) => state.textSize)
+  const calloutTextSize = useEditor((state) => state.calloutTextSize)
   const calloutShape = useEditor((state) => state.calloutShape)
   const annotations = useEditor((state) => state.annotations)
   const guides = useEditor((state) => state.guides)
@@ -207,6 +217,7 @@ export function CanvasArea() {
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null)
   const [textValue, setTextValue] = useState('')
   const [calloutEdit, setCalloutEdit] = useState<CalloutEdit | null>(null)
+  const [badgeEdit, setBadgeEdit] = useState<BadgeEdit | null>(null)
 
   const board = useMemo(
     () => getBoard(shots, mode, activeId),
@@ -447,6 +458,7 @@ export function CanvasArea() {
           color,
           shot.width,
           shot.height,
+          calloutTextSize,
         )
         state.addAnnotation(shotId, callout)
         openCalloutEditor(shotId, callout)
@@ -561,9 +573,12 @@ export function CanvasArea() {
     const target = (state.annotations[edit.shotId] ?? []).find(
       (annotation) => annotation.id === edit.id,
     )
-    if (!target || target.type !== 'callout' || target.text === text) return
-    state.pushSnapshot(state.snapshot())
-    state.updateAnnotation(edit.shotId, edit.id, { text })
+    if (!target || target.type !== 'callout') return
+    if (target.text !== text) {
+      state.pushSnapshot(state.snapshot())
+      state.updateAnnotation(edit.shotId, edit.id, { text })
+    }
+    state.selectAnnotation(edit.shotId, edit.id)
   }
 
   const handleCalloutDragStart = () => {
@@ -592,6 +607,29 @@ export function CanvasArea() {
       annotation.id,
       part === 'region' ? { x, y } : { labelX: x, labelY: y },
     )
+  }
+
+  const commitBadgeText = (text: string) => {
+    const edit = badgeEdit
+    setBadgeEdit(null)
+    if (!edit) return
+    const state = useEditor.getState()
+    const target = state.badges.find((badge) => badge.id === edit.id)
+    if (!target || target.text === text.trim()) return
+    state.setBadgeText(edit.shotId, text)
+  }
+
+  const openBadgeEditor = (shotId: ShotId, badge: Badge) => {
+    const placement = board.placements.find((item) => item.shot.id === shotId)
+    if (!placement) return
+    setBadgeEdit({
+      shotId,
+      id: badge.id,
+      left: (placement.x + badge.x) * view.zoom + view.x,
+      top: (placement.y + badge.y) * view.zoom + view.y,
+      initialValue: badge.text,
+    })
+    useEditor.getState().selectBadge(badge.id)
   }
 
   const handleBadgeDragStart = (badge: Badge) => {
@@ -638,6 +676,10 @@ export function CanvasArea() {
         onTap={(event) => {
           event.cancelBubble = true
           useEditor.getState().selectBadge(badge.id)
+        }}
+        onDblClick={(event) => {
+          event.cancelBubble = true
+          openBadgeEditor(shot.id, badge)
         }}
         onDragStart={() => handleBadgeDragStart(badge)}
         onDragEnd={(event) => handleBadgeDragEnd(event, badge)}
@@ -770,6 +812,11 @@ export function CanvasArea() {
             key={annotation.id}
             annotation={annotation}
             draggable={editable}
+            labelDraggable={mode === 'single' && !spaceDown}
+            selected={
+              selectedAnnotation?.shotId === shot.id &&
+              selectedAnnotation.id === annotation.id
+            }
             onSelect={() => useEditor.getState().selectAnnotation(shot.id, annotation.id)}
             onDragStart={() => handleCalloutDragStart()}
             onDragEnd={(part, x, y) =>
@@ -1107,6 +1154,16 @@ export function CanvasArea() {
           color={calloutEdit.color}
           initialValue={calloutEdit.initialValue}
           onCommit={commitCalloutText}
+        />
+      ) : null}
+
+      {badgeEdit ? (
+        <BadgeTextInput
+          key={badgeEdit.id}
+          left={badgeEdit.left}
+          top={badgeEdit.top}
+          initialValue={badgeEdit.initialValue}
+          onCommit={commitBadgeText}
         />
       ) : null}
 

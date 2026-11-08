@@ -6,7 +6,7 @@ export type Mode = 'single' | 'compare'
 
 export type Orientation = 'horizontal' | 'vertical'
 
-export type BadgeStyle = 'none' | 'number' | 'beforeAfter'
+export type BadgeStyle = 'none' | 'number' | 'beforeAfter' | 'custom'
 
 export type Tool =
   | 'select'
